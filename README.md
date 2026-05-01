@@ -160,3 +160,6 @@ server {
 
 > **安全提示**：URL 中包含明文密码，建议仅在内网或受信环境中使用，或通过后端动态生成带有临时凭据的嵌入链接。
 
+## 特别鸣谢
+
+- wmz：https://github.com/wmz1024/nodeterminal
