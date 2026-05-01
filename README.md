@@ -35,7 +35,7 @@
 ### 环境要求
 
 - **Node.js** >= 18
-- **pnpm**（推荐）或 npm
+- **pnpm**（推荐）
 - **guacd**（使用 RDP 功能时必须，见下方说明）
 
 ### 安装步骤
@@ -71,14 +71,16 @@ pnpm start
 
 ### guacd 安装（RDP 功能必须）
 
+> **温馨提示**：此功能需要强劲的性能。（最低配置4C4G；推荐配置8-16C 8-32G）
+
 RDP 连接依赖 Apache Guacamole 的代理守护进程 `guacd`，有以下几种安装方式：
 
 ```bash
-# 方式一：Docker 独立运行（推荐，无需改动主应用）
-docker run -d --name guacd --restart unless-stopped -p 4822:4822 guacamole/guacd
-
-# 方式二：Debian/Ubuntu 系统包
+# 方式二：Debian/Ubuntu 系统包（推荐）
 apt install guacd && systemctl enable --now guacd
+
+# 方式一：Docker 独立运行（不推荐，可能会遇到网络不通情况）
+docker run -d --name guacd --restart unless-stopped -p 4822:4822 guacamole/guacd
 
 ```
 
