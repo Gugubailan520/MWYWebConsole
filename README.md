@@ -145,3 +145,13 @@ docker run -d --name guacd --restart unless-stopped -p 4822:4822 guacamole/guacd
 ## 特别鸣谢
 
 - wmz：https://github.com/wmz1024/nodeterminal
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=Gugubailan520%2FMWYWebConsole&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Gugubailan520/MWYWebConsole&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Gugubailan520/MWYWebConsole&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Gugubailan520/MWYWebConsole&type=date&legend=top-left" />
+ </picture>
+</a>
