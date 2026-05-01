@@ -187,7 +187,7 @@
       btn.style.display = status ? '' : 'none';
     }
 
-    // Load connection info from localStorage
+    // Load connection info: priority 1 = localStorage by id, priority 2 = direct URL params
     const params = new URLSearchParams(location.search);
     const serverId = params.get('id');
     if (serverId) {
@@ -200,6 +200,18 @@
           domain: s.domain || ''
         };
       } catch {}
+    }
+    // embed.html direct-param mode: ?host=...&user=...&pass=...
+    if (!connInfo && params.get('host')) {
+      const h = params.get('host');
+      connInfo = {
+        name: h,
+        host: h,
+        port: parseInt(params.get('port')) || 3389,
+        username: params.get('user') || params.get('username') || 'Administrator',
+        password: params.get('pass') || params.get('password') || '',
+        domain:   params.get('domain') || ''
+      };
     }
 
     if (!connInfo) {
@@ -258,11 +270,15 @@
         const dw = display.getWidth();
         const dh = display.getHeight();
         if (!dw || !dh) return;
-        const s = Math.min(area.clientWidth / dw, area.clientHeight / dh, 1);
+        const s = Math.min(area.clientWidth / dw, area.clientHeight / dh);
         display.scale(s);
+        displayEl.style.width  = dw * s + 'px';
+        displayEl.style.height = dh * s + 'px';
         displayEl.style.top  = Math.max(0, (area.clientHeight - dh * s) / 2) + 'px';
         displayEl.style.left = Math.max(0, (area.clientWidth  - dw * s) / 2) + 'px';
       }
+      // Triggered when guacd sends first frame and display dimensions become known
+      display.onresize = scaleDisplay;
       window.addEventListener('resize', scaleDisplay);
 
       // Mouse input
