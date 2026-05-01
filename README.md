@@ -42,8 +42,8 @@
 
 ```bash
 # 克隆项目
-git clone <repo-url>
-cd 冥雾云WebConsole
+git clone https://github.com/Gugubailan520/MWYWebConsole.git
+cd main-MWYWebConsole
 
 # 安装依赖
 pnpm install
@@ -80,7 +80,6 @@ docker run -d --name guacd --restart unless-stopped -p 4822:4822 guacamole/guacd
 # 方式二：Debian/Ubuntu 系统包
 apt install guacd && systemctl enable --now guacd
 
-# 方式三：Docker Compose 同栈部署（见下方 Compose 示例）
 ```
 
 ### 反向代理 (Nginx)
