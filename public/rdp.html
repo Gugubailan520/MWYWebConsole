@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RDP - 冥雾云Web控制台</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg-base: #05060f;
+      --bg-surface: #0c0e1a;
+      --bg-elevated: #131627;
+      --bg-hover: #222744;
+      --text-primary: #eef0ff;
+      --text-secondary: #6b7194;
+      --text-tertiary: #444a6b;
+      --accent: #2563eb;
+      --accent-light: #60a5fa;
+      --accent-glow: rgba(37, 99, 235, 0.25);
+      --danger: #ff6b6b;
+      --success: #00e676;
+      --warning: #ffd93d;
+      --border: rgba(255, 255, 255, 0.06);
+      --border-light: rgba(255, 255, 255, 0.1);
+    }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-base) url('imgs/bj.png') no-repeat center center fixed;
+      background-size: cover;
+      color: var(--text-primary);
+      height: 100vh; height: 100dvh;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    .topbar {
+      height: 44px; min-height: 44px;
+      background: rgba(12, 14, 26, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 16px; gap: 10px;
+    }
+    .topbar-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .topbar-icon svg { width: 15px; height: 15px; stroke: #4fc3f7; fill: none; }
+    .topbar-title {
+      font-size: 13px; font-weight: 600; color: var(--text-primary);
+      display: flex; align-items: center; gap: 8px; min-width: 0;
+    }
+    .topbar-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .topbar-sub {
+      font-size: 11px; color: var(--text-tertiary); font-weight: 400;
+      font-family: 'SF Mono', 'Cascadia Code', monospace;
+    }
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+    .conn-badge {
+      display: flex; align-items: center; gap: 5px; font-size: 11px;
+      color: var(--text-tertiary); padding: 4px 12px; border-radius: 20px;
+      background: var(--bg-elevated); border: 1px solid var(--border); font-weight: 500;
+    }
+    .conn-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-tertiary); }
+    .conn-badge.connected { color: var(--success); border-color: rgba(0,230,118,0.2); background: rgba(0,230,118,0.05); }
+    .conn-badge.connected .dot { background: var(--success); }
+
+    .tb-btn {
+      display: flex; align-items: center; justify-content: center;
+      gap: 5px; padding: 5px 12px; border: 1px solid var(--border);
+      background: var(--bg-elevated); color: var(--text-secondary);
+      border-radius: 6px; font-size: 11px; font-weight: 500;
+      cursor: pointer; font-family: inherit; transition: all 0.15s; white-space: nowrap;
+    }
+    .tb-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-light); }
+    .tb-btn.danger { border-color: rgba(255,107,107,0.3); color: var(--danger); }
+    .tb-btn.danger:hover { background: var(--danger); color: #fff; }
+
+    .rdp-area {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      overflow: auto; position: relative; background: #000;
+    }
+    #rdpCanvas { cursor: default; display: block; }
+
+    .rdp-status {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 12px; color: var(--text-tertiary); font-size: 14px;
+      background: var(--bg-base); z-index: 10; transition: opacity 0.3s;
+    }
+    .rdp-status.hidden { opacity: 0; pointer-events: none; }
+    .rdp-spinner {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border-light); border-top-color: #4fc3f7;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .rdp-error { color: var(--danger); font-size: 13px; text-align: center; padding: 0 20px; }
+
+    .statusbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 16px; border-top: 1px solid var(--border);
+      background: var(--bg-surface); font-size: 10px; color: var(--text-tertiary);
+    }
+
+    .toast-container {
+      position: fixed; bottom: 20px; right: 20px;
+      display: flex; flex-direction: column; gap: 8px; z-index: 2000; pointer-events: none;
+    }
+    .toast {
+      padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 500;
+      background: var(--bg-elevated); border: 1px solid var(--border-light);
+      color: var(--text-primary); box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      animation: toastIn 0.3s ease; pointer-events: auto;
+    }
+    .toast.error { border-color: rgba(255,107,107,0.3); color: var(--danger); }
+    .toast.success { border-color: rgba(0,230,118,0.3); color: var(--success); }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-icon">
+      <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+    </div>
+    <div class="topbar-title">
+      <span>RDP</span>
+      <span class="topbar-sub" id="topbarLabel">连接中...</span>
+    </div>
+    <div class="topbar-right">
+      <button class="tb-btn" onclick="sendCtrlAltDel()" title="Ctrl+Alt+Del">CAD</button>
+      <button class="tb-btn" onclick="downloadRdpFile()" title="下载 .rdp 文件">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        .rdp
+      </button>
+      <button class="tb-btn" onclick="toggleFullscreen()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
+      <div class="conn-badge" id="connBadge">
+        <span class="dot"></span>
+        <span id="connStatusText">连接中</span>
+      </div>
+      <button class="tb-btn danger" id="disconnectBtn" onclick="disconnect()" style="display:none">断开</button>
+    </div>
+  </div>
+
+  <div class="rdp-area" id="rdpArea">
+    <div class="rdp-status" id="rdpStatus">
+      <div class="rdp-spinner"></div>
+      <span id="rdpStatusText">正在连接...</span>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span id="statusText">等待连接...</span>
+    <span id="resolution"></span>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Guacamole client -->
+  <script src="/guacamole-common.js"></script>
+  <script>
+    const STORAGE_KEY = 'ssh_servers';
+    let guacClient = null;
+    let connInfo = null;
+
+    function toast(msg, type) {
+      const el = document.createElement('div');
+      el.className = 'toast' + (type ? ' ' + type : '');
+      el.textContent = msg;
+      document.getElementById('toastContainer').appendChild(el);
+      setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
+    }
+
+    function setConnected(status) {
+      const badge = document.getElementById('connBadge');
+      const text  = document.getElementById('connStatusText');
+      const btn   = document.getElementById('disconnectBtn');
+      badge.className = status ? 'conn-badge connected' : 'conn-badge';
+      text.textContent = status ? '已连接' : '未连接';
+      btn.style.display = status ? '' : 'none';
+    }
+
+    // Load connection info from localStorage
+    const params = new URLSearchParams(location.search);
+    const serverId = params.get('id');
+    if (serverId) {
+      try {
+        const servers = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        const s = servers.find(x => x.id === serverId);
+        if (s) connInfo = {
+          name: s.name, host: s.host, port: s.port || 3389,
+          username: s.username || 'Administrator', password: s.password || '',
+          domain: s.domain || ''
+        };
+      } catch {}
+    }
+
+    if (!connInfo) {
+      document.getElementById('topbarLabel').textContent = '缺少连接参数';
+      document.getElementById('rdpStatusText').textContent = '错误: 缺少连接参数';
+    } else {
+      document.title = 'RDP ' + connInfo.name + ' - 冥雾云Web控制台';
+      document.getElementById('topbarLabel').textContent = connInfo.host + ':' + connInfo.port;
+      startConnection();
+    }
+
+    async function startConnection() {
+      const area = document.getElementById('rdpArea');
+      const screenW = Math.max(800, area.clientWidth  || 1280);
+      const screenH = Math.max(600, area.clientHeight || 720);
+
+      document.getElementById('rdpStatusText').textContent = '正在获取连接凭证...';
+
+      let token;
+      try {
+        const resp = await fetch('/api/rdp-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            host: connInfo.host, port: connInfo.port,
+            username: connInfo.username, password: connInfo.password,
+            domain: connInfo.domain, width: screenW, height: screenH
+          })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        token = data.token;
+      } catch (e) {
+        document.getElementById('rdpStatusText').innerHTML =
+          '<div class="rdp-error">获取连接凭证失败: ' + e.message + '</div>';
+        return;
+      }
+
+      document.getElementById('rdpStatusText').textContent =
+        '正在连接 ' + connInfo.host + ':' + connInfo.port + '...';
+
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const tunnel = new Guacamole.WebSocketTunnel(proto + '//' + location.host + '/guac');
+      guacClient = new Guacamole.Client(tunnel);
+
+      // Mount Guacamole display element
+      const display   = guacClient.getDisplay();
+      const displayEl = display.getElement();
+      displayEl.style.position = 'absolute';
+      displayEl.style.cursor   = 'default';
+      area.appendChild(displayEl);
+
+      // Scale & center display to fit the rdpArea
+      function scaleDisplay() {
+        if (!guacClient) return;
+        const dw = display.getWidth();
+        const dh = display.getHeight();
+        if (!dw || !dh) return;
+        const s = Math.min(area.clientWidth / dw, area.clientHeight / dh, 1);
+        display.scale(s);
+        displayEl.style.top  = Math.max(0, (area.clientHeight - dh * s) / 2) + 'px';
+        displayEl.style.left = Math.max(0, (area.clientWidth  - dw * s) / 2) + 'px';
+      }
+      window.addEventListener('resize', scaleDisplay);
+
+      // Mouse input
+      const mouse = new Guacamole.Mouse(displayEl);
+      mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = function(state) {
+        if (!guacClient) return;
+        const s = display.getScale() || 1;
+        const adj = new Guacamole.Mouse.State(
+          Math.floor(state.x / s), Math.floor(state.y / s),
+          state.left, state.middle, state.right, state.up, state.down
+        );
+        guacClient.sendMouseState(adj);
+      };
+
+      // Keyboard input
+      const keyboard = new Guacamole.Keyboard(document);
+      keyboard.onkeydown = (k) => { if (guacClient) guacClient.sendKeyEvent(1, k); };
+      keyboard.onkeyup   = (k) => { if (guacClient) guacClient.sendKeyEvent(0, k); };
+
+      // Connection state changes
+      // 0=idle 1=connecting 2=waiting 3=connected 4=disconnecting 5=disconnected
+      guacClient.onstatechange = (state) => {
+        if (state === 3) {
+          document.getElementById('rdpStatus').classList.add('hidden');
+          setConnected(true);
+          scaleDisplay();
+          document.getElementById('resolution').textContent = screenW + ' × ' + screenH;
+          document.getElementById('statusText').textContent = '已连接 - ' + connInfo.host + ':' + connInfo.port;
+          toast('RDP 连接成功', 'success');
+        } else if (state === 5) {
+          setConnected(false);
+          document.getElementById('rdpStatus').classList.remove('hidden');
+          document.getElementById('rdpStatusText').textContent = '连接已断开';
+          document.getElementById('statusText').textContent = '连接已断开';
+        }
+      };
+
+      guacClient.onerror = (err) => {
+        setConnected(false);
+        document.getElementById('rdpStatus').classList.remove('hidden');
+        const msg = (err && err.message) || (err && err.code ? 'Code ' + err.code : '连接失败');
+        document.getElementById('rdpStatusText').innerHTML =
+          '<div class="rdp-error">连接错误: ' + msg +
+          '<br><small>请确认 guacd 已运行: docker run -d -p 4822:4822 guacamole/guacd</small></div>';
+        document.getElementById('statusText').textContent = '连接错误';
+        toast('RDP 错误: ' + msg, 'error');
+      };
+
+      guacClient.connect('token=' + encodeURIComponent(token));
+    }
+
+    // ===== Toolbar =====
+    function sendCtrlAltDel() {
+      if (!guacClient) return;
+      guacClient.sendKeyEvent(1, 0xFFE3); // Ctrl
+      guacClient.sendKeyEvent(1, 0xFFE9); // Alt
+      guacClient.sendKeyEvent(1, 0xFFFF); // Del
+      guacClient.sendKeyEvent(0, 0xFFFF);
+      guacClient.sendKeyEvent(0, 0xFFE9);
+      guacClient.sendKeyEvent(0, 0xFFE3);
+      toast('已发送 Ctrl+Alt+Del', 'success');
+    }
+
+    function disconnect() {
+      if (guacClient) { try { guacClient.disconnect(); } catch {} guacClient = null; }
+      setConnected(false);
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    }
+
+    function downloadRdpFile() {
+      if (!connInfo) return;
+      const lines = [
+        'full address:s:' + connInfo.host + ':' + connInfo.port,
+        'username:s:' + (connInfo.domain ? connInfo.domain + '\\' : '') + connInfo.username,
+        'screen mode id:i:2',
+        'desktopwidth:i:1920', 'desktopheight:i:1080',
+        'session bpp:i:32', 'compression:i:1',
+        'allow font smoothing:i:1', 'allow desktop composition:i:1',
+        'redirectclipboard:i:1', 'autoreconnection enabled:i:1',
+        'authentication level:i:2', 'prompt for credentials:i:0',
+        'negotiate security layer:i:1',
+      ];
+      const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'application/x-rdp' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (connInfo.name || connInfo.host).replace(/[^\w\-. ]/g, '_') + '.rdp';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('RDP 文件已下载', 'success');
+    }
+  </script>
+</body>
+</html>
