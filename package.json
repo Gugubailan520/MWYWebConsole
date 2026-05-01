@@ -5,7 +5,13 @@
   "main": "server.js",
   "packageManager": "pnpm@10.33.2",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "pkg:win": "pkg . --targets node18-win-x64 --output MWYWebConsole.exe",
+    "pkg:linux": "pkg . --targets node18-linux-x64 --output MWYWebConsole",
+    "pkg:mac": "pkg . --targets node18-macos-x64 --output MWYWebConsole.app"
+  },
+  "bin": {
+    "MWYWebConsole": "./server.js"
   },
   "dependencies": {
     "@novnc/novnc": "^1.6.0",
@@ -17,5 +23,18 @@
     "ssh2": "^1.16.0",
     "uuid": "^14.0.0",
     "ws": "^8.18.0"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*",
+      ".env"
+    ],
+    "mountpoints": [
+      "/users"
+    ],
+    "scripts": "server.js" 
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
   }
 }

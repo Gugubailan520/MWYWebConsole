@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
@@ -281,8 +282,12 @@ app.post('/ftp/rename', async (req, res) => {
 
 // ==================== User Auth & Sync ====================
 
-const USERS_DIR = path.join(__dirname, 'users');
-if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR, { recursive: true });
+const USERS_DIR = path.resolve('./users');
+try {
+  if (!fs.existsSync(USERS_DIR)) {
+    fs.mkdirSync(USERS_DIR, { recursive: true });
+  }
+} catch (err) {}
 
 function userFile(username) {
   const safe = username.replace(/[^a-zA-Z0-9_\-]/g, '');
