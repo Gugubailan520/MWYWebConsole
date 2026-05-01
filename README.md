@@ -43,7 +43,7 @@
 ```bash
 # 克隆项目
 git clone https://github.com/Gugubailan520/MWYWebConsole.git
-cd main-MWYWebConsole
+cd MWYWebConsole
 
 # 安装依赖
 pnpm install
