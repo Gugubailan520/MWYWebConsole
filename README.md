@@ -84,28 +84,6 @@ docker run -d --name guacd --restart unless-stopped -p 4822:4822 guacamole/guacd
 
 ```
 
-### 反向代理 (Nginx)
-
-冥雾云WebConsole 使用 WebSocket，Nginx 配置需要包含：
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_read_timeout 86400;
-    }
-}
-```
-
-
 ## iframe 嵌入 (embed.html)
 
 `embed.html` 是一个中间件页面，通过 URL 查询参数接收连接信息，自动路由到对应的功能页面（SSH、SFTP、VNC、RDP、FTP）。适合将 冥雾云WebConsole 嵌入到其他系统的 iframe 中使用。
