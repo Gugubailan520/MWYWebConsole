@@ -1,5 +1,7 @@
 # 冥雾云WebConsole
 
+![简介图](https://raw.githubusercontent.com/Gugubailan520/MWYWebConsole/refs/heads/main/imgs/1.png)
+
 基于 Node.js 的 Web 远程连接管理平台，支持 SSH 终端、SFTP/FTP 文件管理、VNC/RDP 远程桌面，所有操作均在浏览器中完成。内置管理后台，支持站点定制、用户管理、功能开关和 SOCKS5 出站代理。
 
 
