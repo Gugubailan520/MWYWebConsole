@@ -4,3 +4,9 @@ users/
 *.log
 .DS_Store
 Thumbs.db
+
+# 运行期数据
+config.yml
+data/
+
+.qoder/

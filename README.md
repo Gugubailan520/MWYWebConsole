@@ -1,16 +1,23 @@
 # 冥雾云WebConsole
 
-基于 Node.js 的 Web 远程连接管理器，支持 SSH 终端、SFTP 文件管理、VNC/RDP 远程桌面和 FTP 文件传输，所有操作均在浏览器中完成。
+基于 Node.js 的 Web 远程连接管理平台，支持 SSH 终端、SFTP/FTP 文件管理、VNC/RDP 远程桌面，所有操作均在浏览器中完成。内置管理后台，支持站点定制、用户管理、功能开关和 SOCKS5 出站代理。
 
 
 ## 功能特点
 
 ### 多协议支持
-- **SSH 终端** — 基于 xterm.js 的全功能 Web 终端，支持密码和密钥认证，同时支持目录跟随自动SFTP。
+- **SSH 终端** — 基于 xterm.js 的全功能 Web 终端，支持密码和密钥认证，同时支持目录跟随自动 SFTP
 - **SFTP 文件管理** — 在线浏览、上传、下载、编辑远程文件，支持拖拽上传
 - **VNC 远程桌面** — 基于 noVNC 的浏览器内 VNC 客户端
 - **RDP 远程桌面** — 基于 Apache Guacamole (guacamole-lite + guacd) 的浏览器内 Windows 远程桌面，支持 NLA 网络级别身份验证
 - **FTP 文件传输** — 支持 FTP / FTPS (Explicit TLS / Implicit TLS) 的文件浏览和传输
+
+### 管理后台
+- **站点定制** — 自定义站点名称、副标题、Logo、Favicon、背景图、主题色
+- **功能开关** — 按需开关 SSH / SFTP / RDP / VNC / FTP / 用户注册
+- **用户管理** — 创建、禁用、重置密码、删除普通用户
+- **连接日志** — 记录所有连接元数据，支持按类型筛选和 CSV 导出
+- **SOCKS5 代理** — 配置全局出站代理，按协议选择应用范围（SSH/SFTP/VNC/FTP）
 
 ### 服务器管理
 - **卡片式管理界面** — 可视化管理所有服务器连接
@@ -20,7 +27,7 @@
 
 ### 云同步
 - **端到端加密** — 使用 AES-GCM 在客户端加密，服务器无法查看连接信息
-- **用户注册/登录** — 内置账号系统
+- **用户注册/登录** — 内置 JWT 账号系统
 - **同步管理面板** — 可视化对比本地/云端数据，支持分页和去重过滤
 - **单项操作** — 支持逐条上传、下载、删除云端数据
 
@@ -43,49 +50,72 @@
 ```bash
 # 克隆项目
 git clone <repo-url>
-cd 冥雾云WebConsole
+cd MWYwebConsole
 
 # 安装依赖
 pnpm install
 
-# 复制环境变量配置
-cp .env.example .env
+# 复制配置文件
+cp config.example.yml config.yml
+# 编辑 config.yml，修改管理员密码和加密密钥
 
 # 启动服务
 pnpm start
 ```
 
-服务默认运行在 `http://localhost:3000`。
+服务默认运行在 `http://localhost:25555`。首次启动自动创建 SQLite 数据库和默认配置。
 
-### 环境变量
+### 配置文件 (config.yml)
 
-编辑 `.env` 文件（参考 `.env.example`）：
+编辑 `config.yml`（参考 `config.example.yml`）：
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `PORT` | 主服务监听端口 | `3000` |
-| `GUAC_CRYPT_KEY` | RDP Token 加密密钥（32 字符，生产环境请修改） | 内置默认值 |
-| `GUAC_WS_PORT` | guacamole-lite 内部端口（仅监听 127.0.0.1） | `4823` |
-| `GUACD_HOST` | guacd 守护进程地址 | `127.0.0.1` |
-| `GUACD_PORT` | guacd 守护进程端口 | `4822` |
+```yaml
+port: 25555
+
+admin:
+  username: admin
+  password: changeme      # 首次部署请修改！
+
+jwt_secret: ""            # 留空则重启后 token 失效
+jwt_expires_in: 604800    # token 有效期（秒），默认 7 天
+
+guacd:
+  host: 127.0.0.1
+  port: 4822
+guac_ws_port: 4823
+guac_crypt_key: "MWYwebConsole-GuacLite!!-Secret!!"  # 生产环境请修改！
+
+database: ./data/console.db
+uploads_dir: ./data/uploads
+log_retention_days: 90
+```
+
+> **注意**：`config.yml` 中的配置为启动期不可变量（端口、管理员、密钥等），修改后需重启。运行期可变设置（站点样式、功能开关、用户数据）在管理后台修改，无需重启。
+
+### 管理后台
+
+使用 `config.yml` 中配置的 admin 账号登录后，顶栏右侧出现「管理」按钮，点击进入管理后台。也可直接访问 `/admin.html`。
+
+管理后台包含：
+- **基本设置** — 站点名称、副标题、Logo、Favicon、背景图、主题色
+- **功能开关** — SSH / SFTP / RDP / VNC / FTP / 注册
+- **代理设置** — SOCKS5 全局出站代理
+- **用户管理** — 创建/禁用/重置密码/删除用户
+- **连接日志** — 查看/筛选/导出连接记录
 
 ### guacd 安装（RDP 功能必须）
 
-RDP 连接依赖 Apache Guacamole 的代理守护进程 `guacd`，有以下几种安装方式：
+RDP 连接依赖 Apache Guacamole 的代理守护进程 `guacd`：
 
 ```bash
-# 方式一：Docker 独立运行（推荐，无需改动主应用）
+# Docker（推荐）
 docker run -d --name guacd --restart unless-stopped -p 4822:4822 guacamole/guacd
 
-# 方式二：Debian/Ubuntu 系统包
+# Debian/Ubuntu
 apt install guacd && systemctl enable --now guacd
-
-# 方式三：Docker Compose 同栈部署（见下方 Compose 示例）
 ```
 
 ### 反向代理 (Nginx)
-
-冥雾云WebConsole 使用 WebSocket，Nginx 配置需要包含：
 
 ```nginx
 server {
@@ -93,7 +123,7 @@ server {
     server_name your-domain.com;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:25555;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -107,7 +137,7 @@ server {
 
 ## iframe 嵌入 (embed.html)
 
-`embed.html` 是一个中间件页面，通过 URL 查询参数接收连接信息，自动路由到对应的功能页面（SSH、SFTP、VNC、RDP、FTP）。适合将 冥雾云WebConsole 嵌入到其他系统的 iframe 中使用。
+`embed.html` 是中间件页面，通过 URL 查询参数接收连接信息，自动路由到对应功能页面。适合嵌入第三方系统的 iframe。
 
 ### 基本格式
 
@@ -150,7 +180,7 @@ server {
 
 ```html
 <iframe
-  src="https://your-冥雾云WebConsole.com/embed.html?type=ssh&host=10.0.0.1&user=root&pass=xxx"
+  src="https://your-domain.com/embed.html?type=ssh&host=10.0.0.1&user=root&pass=xxx"
   width="100%"
   height="600"
   style="border: none;"

@@ -29,12 +29,14 @@ cd MWYwebConsole
 pnpm install
 ```
 
-### 3. 配置环境变量
+### 3. 配置
 
 ```bash
-cp .env.example .env
-# 编辑 .env，至少修改 GUAC_CRYPT_KEY
+cp config.example.yml config.yml
+# 编辑 config.yml，至少修改 admin.password 和 guac_crypt_key
 ```
+
+> 首次启动会自动创建 `data/console.db`（SQLite）和 `data/uploads/` 目录。
 
 ### 4. 启动 guacd（使用 RDP 时）
 
@@ -48,7 +50,7 @@ docker run -d --name guacd --restart unless-stopped -p 4822:4822 guacamole/guacd
 pnpm start
 ```
 
-服务运行在 `http://localhost:3000`（或 `.env` 中配置的端口）。
+服务运行在 `http://localhost:25555`（或 `config.yml` 中配置的端口）。
 
 ---
 
@@ -68,20 +70,20 @@ services:
     container_name: mwy-console
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "25555:25555"
     volumes:
-      - ./users:/app/users
-      - ./.env:/app/.env:ro
+      - ./data:/app/data
+      - ./config.yml:/app/config.yml:ro
     environment:
       - NODE_ENV=production
-      - GUACD_HOST=guacd
     depends_on:
       - guacd
 ```
 
 ```bash
-# 复制并配置环境变量
-cp .env.example .env
+# 复制并配置
+cp config.example.yml config.yml
+# 编辑 config.yml，设置 admin 密码和 guacd 连接
 
 # 启动（后台运行）
 docker compose up -d
@@ -97,8 +99,10 @@ docker compose down
 
 | 宿主机路径 | 容器路径 | 说明 |
 |-----------|---------|------|
-| `./users/` | `/app/users/` | 用户账号数据（持久化必须挂载） |
-| `./.env` | `/app/.env` | 环境变量配置（只读挂载） |
+| `./data/` | `/app/data/` | SQLite 数据库 + 上传资源（持久化必须挂载） |
+| `./config.yml` | `/app/config.yml` | 启动期配置（只读挂载） |
+
+> **注意**：`config.yml` 中 `guacd.host` 应设为 `guacd`（Compose 服务名）。
 
 ---
 
@@ -112,14 +116,13 @@ docker run -d --name guacd --restart unless-stopped -p 4822:4822 guacamole/guacd
 docker run -d \
   --name mwy-console \
   --restart unless-stopped \
-  -p 3000:3000 \
-  -v $(pwd)/users:/app/users \
-  -v $(pwd)/.env:/app/.env:ro \
-  -e GUACD_HOST=host.docker.internal \
+  -p 25555:25555 \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/config.yml:/app/config.yml:ro \
   your-registry/mwy-web-console:latest
 ```
 
-> **注意**：若 guacd 与应用不在同一个 Docker 网络，需将 `GUACD_HOST` 设为宿主机可达的地址。
+> **注意**：若 guacd 与应用不在同一个 Docker 网络，需在 `config.yml` 中将 `guacd.host` 设为宿主机可达的地址。
 
 ---
 
@@ -137,7 +140,9 @@ RDP 功能依赖 Apache Guacamole 的守护进程 `guacd`（内部使用 FreeRDP
 
 ## 验证安装
 
-启动后访问 `http://your-host:3000`，若能看到服务器管理界面即为成功。
+启动后访问 `http://your-host:25555`，若能看到服务器管理界面即为成功。
+
+使用 `config.yml` 中配置的管理员账号登录后，顶栏右侧会出现「管理」按钮，点击进入管理后台。
 
 若不需要 RDP，guacd 可以不安装。服务启动时会显示：
 

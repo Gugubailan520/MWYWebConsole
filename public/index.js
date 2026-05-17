@@ -35,7 +35,20 @@ function toast(msg, type) {
 // ===== Session =====
 function loadSession() {
   try { session = JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { session = null; }
-  updateAccountUI();
+  // Verify session token still valid
+  if (session && session.token) {
+    fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + session.token } })
+      .then(r => r.json())
+      .then(d => {
+        if (!d.success) { session = null; saveSession(); }
+        updateAccountUI();
+        applyFeatureFlags();
+      })
+      .catch(() => { updateAccountUI(); applyFeatureFlags(); });
+  } else {
+    updateAccountUI();
+  }
+  applyFeatureFlags();
 }
 
 function saveSession() {
@@ -52,9 +65,14 @@ function updateAccountUI() {
     btn.style.display = 'none';
     document.getElementById('accountAvatar').textContent = session.username.charAt(0).toUpperCase();
     document.getElementById('accountName').textContent = session.username;
+    // Show admin button if admin
+    const adminBtn = document.getElementById('adminBtn');
+    if (adminBtn) adminBtn.style.display = (session.user && session.user.isAdmin) ? '' : 'none';
   } else {
     area.style.display = 'none';
     btn.style.display = '';
+    const adminBtn = document.getElementById('adminBtn');
+    if (adminBtn) adminBtn.style.display = 'none';
   }
 }
 
@@ -101,8 +119,12 @@ async function authSubmit() {
     const data = await res.json();
     if (data.error) { toast(data.error, 'error'); return; }
 
-    session = { username, password, encKey };
+    session = { username, password, encKey, token: data.token, user: data.user };
     saveSession();
+    // Store admin token if admin
+    if (data.user && data.user.isAdmin) {
+      sessionStorage.setItem('admin_token', data.token);
+    }
     hideLoginModal();
     toast(loginTab === 'register' ? '注册成功' : '登录成功', 'success');
     refreshCloudIds();
@@ -235,7 +257,9 @@ let syncCloudPage = 1;
 let syncUniqueOnly = false;
 
 async function apiPost(url, body) {
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const headers = { 'Content-Type': 'application/json' };
+  if (session && session.token) headers['Authorization'] = 'Bearer ' + session.token;
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   return res.json();
 }
 
@@ -1092,6 +1116,33 @@ function toggleTheme() {
 
 function loadTheme() {
   applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+}
+
+// ===== Feature Flags UI =====
+function applyFeatureFlags() {
+  if (!window.__FEATURES__) return;
+  const f = window.__FEATURES__;
+  // Hide/show protocol sidebar buttons in add-server modal
+  const btnMap = { ssh: 'ssh', sftp: 'sftp', vnc: 'vnc', rdp: 'rdp', ftp: 'ftp' };
+  const sidebarBtns = document.querySelectorAll('#typeSidebar .modal-sidebar-item');
+  const typeOrder = ['ssh', 'sftp', 'vnc', 'rdp', 'ftp'];
+  typeOrder.forEach((type, idx) => {
+    if (sidebarBtns[idx]) {
+      sidebarBtns[idx].style.display = f[type] === false ? 'none' : '';
+    }
+  });
+  // Quick connect: if SSH disabled, change placeholder
+  const qh = document.getElementById('quickHost');
+  if (qh && f.ssh === false && f.sftp === false && f.rdp === false && f.vnc === false && f.ftp === false) {
+    qh.placeholder = '所有协议已禁用';
+  }
+}
+
+// Listen for feature flags
+if (window.__FEATURES__) {
+  applyFeatureFlags();
+} else {
+  document.addEventListener('site-features-ready', () => applyFeatureFlags());
 }
 
 // Init

@@ -1,0 +1,35 @@
+# 冥雾云Web控制台 配置文件
+# 启动期配置（修改后需重启服务生效）。运行期可变设置请在管理后台修改。
+
+# ===== 应用监听 =====
+port: 25555
+
+# ===== 管理员账户（不入数据库，仅在此处配置）=====
+admin:
+  username: admin
+  password: changeme
+
+# ===== JWT 鉴权 =====
+# 用于签发用户登录 token，建议设置为 32+ 字符随机字符串。留空则启动时随机生成（重启会失效所有已发 token）
+jwt_secret: ""
+# token 有效期，单位秒（默认 7 天）
+jwt_expires_in: 604800
+
+# ===== Guacamole（RDP 后端）=====
+guacd:
+  host: 127.0.0.1
+  port: 4822
+# guacamole-lite 内部 WebSocket 端口（仅监听 127.0.0.1，不对外暴露）
+guac_ws_port: 4823
+# AES-256-CBC 加密密钥（必须恰好 32 字符，生产环境请修改！）
+guac_crypt_key: "MWYwebConsole-GuacLite!!-Secret!!"
+
+# ===== 数据库 =====
+# SQLite 数据库文件路径（相对路径将基于工作目录解析）
+database: ./data/console.db
+
+# ===== 上传与日志 =====
+# 自定义站点资源（logo/背景/favicon）保存目录
+uploads_dir: ./data/uploads
+# 连接日志保留天数（0 表示永久保留）
+log_retention_days: 90
