@@ -244,15 +244,28 @@ function fetchMonitorStats() {
   ws.send(JSON.stringify({ type: 'monitor-stats' }));
 }
 
+// ===== Monitor History =====
+const MONITOR_HISTORY_LEN = 30;
+let cpuHistory = [], memHistory = [];
+let rxHistory = [], txHistory = [];
+let readHistory = [], writeHistory = [];
+let diskUsageHistory = {}; // { mount: [percent, ...] }
+
 function handleMonitorStats(raw) {
   if (!monitorPanelVisible) return;
-  // Split by section delimiters
   const sections = raw.split(/===([A-Z]+)===/);
-  // sections[0]=stat, [1]="MEMINFO", [2]=meminfo, [3]="NETDEV", [4]=netdev, [5]="DISKSTATS", [6]=diskstats
-  const statRaw = sections[0] || '';
-  const meminfoRaw = sections[2] || '';
-  const netdevRaw  = sections[4] || '';
-  const diskRaw    = sections[6] || '';
+  const secMap = {};
+  for (let i = 1; i < sections.length; i += 2) {
+    secMap[sections[i]] = sections[i + 1] || '';
+  }
+  const statRaw     = sections[0] || '';
+  const meminfoRaw  = secMap['MEMINFO'] || '';
+  const netdevRaw   = secMap['NETDEV'] || '';
+  const diskRaw     = secMap['DISKSTATS'] || '';
+  const uptimeRaw   = secMap['UPTIME'] || '';
+  const loadavgRaw  = secMap['LOADAVG'] || '';
+  const dfRaw       = secMap['DF'] || '';
+  const thermalRaw  = secMap['THERMAL'] || '';
   const now = Date.now();
 
   // --- CPU ---
@@ -283,8 +296,10 @@ function handleMonitorStats(raw) {
   const swapTotal  = memMap['SwapTotal']    || 0;
   const swapFree   = memMap['SwapFree']     || 0;
   const swapUsed   = swapTotal - swapFree;
+  const buffers    = memMap['Buffers'] || 0;
+  const cached     = memMap['Cached']  || 0;
 
-  // --- Network (sum non-lo interfaces) ---
+  // --- Network ---
   let totalRx = 0, totalTx = 0;
   netdevRaw.split('\n').forEach(l => {
     const m = l.match(/^\s*(\w+):\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)/);
@@ -297,7 +312,7 @@ function handleMonitorStats(raw) {
     txRate = Math.max(0, (totalTx - prevMonitorStats.net.tx) / dt);
   }
 
-  // --- Disk IO (physical drives only) ---
+  // --- Disk IO ---
   let totalRS = 0, totalWS = 0;
   diskRaw.split('\n').forEach(l => {
     const p = l.trim().split(/\s+/);
@@ -313,75 +328,288 @@ function handleMonitorStats(raw) {
     writeRate = Math.max(0, (totalWS - prevMonitorStats.disk.ws) * 512 / dt);
   }
 
-  // Save snapshot
-  prevMonitorStats = { time: now, cpu: cpuStats, net: { rx: totalRx, tx: totalTx }, disk: { rs: totalRS, ws: totalWS } };
+  // --- Uptime ---
+  const uptimeSec = parseFloat(uptimeRaw.split(' ')[0]) || 0;
 
-  renderMonitor({ cpuPercent, memTotal, memUsed, memPercent, swapTotal, swapUsed, rxRate, txRate, readRate, writeRate });
+  // --- Load average ---
+  const loadParts = loadavgRaw.trim().split(/\s+/);
+  const load1  = parseFloat(loadParts[0]) || 0;
+  const load5  = parseFloat(loadParts[1]) || 0;
+  const load15 = parseFloat(loadParts[2]) || 0;
+  const procsRunning = parseInt((loadParts[3] || '').split('/')[0]) || 0;
+  const procsTotal   = parseInt((loadParts[3] || '').split('/')[1]) || 0;
+
+  // --- Disk usage (df) ---
+  const diskUsage = [];
+  dfRaw.split('\n').forEach(l => {
+    const p = l.trim().split(/\s+/);
+    if (p.length >= 5 && p[0].startsWith('/')) {
+      diskUsage.push({ mount: p[0], size: p[1], used: p[2], avail: p[3], percent: parseInt(p[4]) || 0 });
+    }
+  });
+
+  // --- CPU Temperature ---
+  const temps = thermalRaw.trim().split('\n').map(Number).filter(t => t > 0);
+  const cpuTemp = temps.length > 0 ? temps[0] / 1000 : null;
+
+  // Save snapshot & history
+  prevMonitorStats = { time: now, cpu: cpuStats, net: { rx: totalRx, tx: totalTx }, disk: { rs: totalRS, ws: totalWS } };
+  cpuHistory.push(cpuPercent);
+  memHistory.push(memPercent);
+  rxHistory.push(rxRate);
+  txHistory.push(txRate);
+  readHistory.push(readRate);
+  writeHistory.push(writeRate);
+  diskUsage.forEach(d => {
+    if (!diskUsageHistory[d.mount]) diskUsageHistory[d.mount] = [];
+    diskUsageHistory[d.mount].push(d.percent);
+    if (diskUsageHistory[d.mount].length > MONITOR_HISTORY_LEN) diskUsageHistory[d.mount].shift();
+  });
+  if (cpuHistory.length > MONITOR_HISTORY_LEN) cpuHistory.shift();
+  if (memHistory.length > MONITOR_HISTORY_LEN) memHistory.shift();
+  if (rxHistory.length > MONITOR_HISTORY_LEN) rxHistory.shift();
+  if (txHistory.length > MONITOR_HISTORY_LEN) txHistory.shift();
+  if (readHistory.length > MONITOR_HISTORY_LEN) readHistory.shift();
+  if (writeHistory.length > MONITOR_HISTORY_LEN) writeHistory.shift();
+
+  renderMonitor({
+    cpuPercent, memTotal, memUsed, memPercent, swapTotal, swapUsed, buffers, cached,
+    rxRate, txRate, readRate, writeRate,
+    uptimeSec, load1, load5, load15, procsRunning, procsTotal,
+    diskUsage, cpuTemp
+  });
 }
 
 function renderMonitor(s) {
   const body = document.getElementById('mpBody');
   if (!body) return;
   const cpuCls = s.cpuPercent > 80 ? 'danger' : s.cpuPercent > 60 ? 'warning' : '';
+  const cpuValCls = s.cpuPercent > 80 ? 'danger' : s.cpuPercent > 60 ? 'warn' : '';
   const memCls = s.memPercent > 85 ? 'danger' : s.memPercent > 70 ? 'warning' : '';
+  const memValCls = s.memPercent > 85 ? 'danger' : s.memPercent > 70 ? 'warn' : '';
   const swapHtml = s.swapTotal > 0
-    ? `<span>Swap ${formatNetSpeed(s.swapUsed * 1024).replace('/s','')}</span>` : '';
-  body.innerHTML = `
-    <div class="mp-card">
-      <div class="mp-card-title">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M9 2v2M2 15h2M2 9h2M22 15h-2M22 9h-2M15 22v-2M9 22v-2"/></svg>
-        CPU
-      </div>
-      <div class="mp-value">${s.cpuPercent.toFixed(1)}<span>%</span></div>
-      <div class="mp-bar-wrap"><div class="mp-bar ${cpuCls}" style="width:${Math.min(100,s.cpuPercent).toFixed(1)}%"></div></div>
-    </div>
-    <div class="mp-card">
-      <div class="mp-card-title">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-        内存
-      </div>
-      <div class="mp-value">${s.memPercent.toFixed(1)}<span>%</span></div>
-      <div class="mp-bar-wrap"><div class="mp-bar ${memCls}" style="width:${Math.min(100,s.memPercent).toFixed(1)}%"></div></div>
-      <div class="mp-sub">
-        <span>${formatSize(s.memUsed * 1024)} / ${formatSize(s.memTotal * 1024)}</span>
-        ${swapHtml}
-      </div>
-    </div>
-    <div class="mp-card">
-      <div class="mp-card-title">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        网络
-      </div>
-      <div class="mp-row">
-        <span class="mp-row-label"><span class="mp-dot mp-dot-rx"></span>下行</span>
-        <span class="mp-row-value">${formatNetSpeed(s.rxRate)}</span>
-      </div>
-      <div class="mp-row">
-        <span class="mp-row-label"><span class="mp-dot mp-dot-tx"></span>上行</span>
-        <span class="mp-row-value">${formatNetSpeed(s.txRate)}</span>
-      </div>
-    </div>
-    <div class="mp-card">
-      <div class="mp-card-title">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-        磁盘 I/O
-      </div>
-      <div class="mp-row">
-        <span class="mp-row-label"><span class="mp-dot mp-dot-rd"></span>读取</span>
-        <span class="mp-row-value">${formatNetSpeed(s.readRate)}</span>
-      </div>
-      <div class="mp-row">
-        <span class="mp-row-label"><span class="mp-dot mp-dot-wr"></span>写入</span>
-        <span class="mp-row-value">${formatNetSpeed(s.writeRate)}</span>
-      </div>
-    </div>
-  `;
+    ? '<span>Swap ' + formatSize(s.swapUsed * 1024) + '</span>' : '';
+
+  // Disk usage
+  let diskHtml = '';
+  s.diskUsage.forEach(d => {
+    const dCls = d.percent > 90 ? 'danger' : d.percent > 75 ? 'warning' : '';
+    diskHtml += '<div class="mp-disk-item"><div class="mp-disk-header"><span class="mp-disk-mount">' + d.mount + '</span><span class="mp-disk-usage">' + d.used + ' / ' + d.size + '</span></div><div class="mp-bar-wrap"><div class="mp-bar ' + dCls + '" style="width:' + d.percent + '%"></div></div></div>';
+  });
+
+  body.innerHTML =
+    // CPU
+    '<div class="mp-card ' + (s.cpuPercent > 80 ? 'critical' : s.cpuPercent > 60 ? 'warn' : '') + '">' +
+      '<div class="mp-card-title">' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M9 2v2M2 15h2M2 9h2M22 15h-2M22 9h-2M15 22v-2M9 22v-2"/></svg>' +
+        'CPU' +
+      '</div>' +
+      '<div class="mp-value ' + cpuValCls + '">' + s.cpuPercent.toFixed(1) + '<span>%</span></div>' +
+      '<div class="mp-bar-wrap"><div class="mp-bar ' + cpuCls + '" style="width:' + Math.min(100,s.cpuPercent).toFixed(1) + '%"></div></div>' +
+      '<div class="mp-chart"><canvas id="cpuChart"></canvas></div>' +
+    '</div>' +
+    // Memory
+    '<div class="mp-card ' + (s.memPercent > 85 ? 'critical' : s.memPercent > 70 ? 'warn' : '') + '">' +
+      '<div class="mp-card-title">' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>' +
+        '内存' +
+      '</div>' +
+      '<div class="mp-value ' + memValCls + '">' + s.memPercent.toFixed(1) + '<span>%</span></div>' +
+      '<div class="mp-bar-wrap"><div class="mp-bar ' + memCls + '" style="width:' + Math.min(100,s.memPercent).toFixed(1) + '%"></div></div>' +
+      '<div class="mp-sub"><span>' + formatSize(s.memUsed * 1024) + ' / ' + formatSize(s.memTotal * 1024) + '</span>' + swapHtml + '</div>' +
+      '<div class="mp-chart"><canvas id="memChart"></canvas></div>' +
+    '</div>' +
+    // Network
+    '<div class="mp-card">' +
+      '<div class="mp-card-title">' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>' +
+        '网络' +
+      '</div>' +
+      '<div class="mp-row"><span class="mp-row-label"><span class="mp-dot mp-dot-rx"></span>下行</span><span class="mp-row-value">' + formatNetSpeed(s.rxRate) + '</span></div>' +
+      '<div class="mp-row"><span class="mp-row-label"><span class="mp-dot mp-dot-tx"></span>上行</span><span class="mp-row-value">' + formatNetSpeed(s.txRate) + '</span></div>' +
+      '<div class="mp-chart"><canvas id="netChart"></canvas></div>' +
+    '</div>' +
+    // Disk I/O
+    '<div class="mp-card">' +
+      '<div class="mp-card-title">' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>' +
+        '磁盘 I/O' +
+      '</div>' +
+      '<div class="mp-row"><span class="mp-row-label"><span class="mp-dot mp-dot-rd"></span>读取</span><span class="mp-row-value">' + formatNetSpeed(s.readRate) + '</span></div>' +
+      '<div class="mp-row"><span class="mp-row-label"><span class="mp-dot mp-dot-wr"></span>写入</span><span class="mp-row-value">' + formatNetSpeed(s.writeRate) + '</span></div>' +
+      '<div class="mp-chart"><canvas id="diskIoChart"></canvas></div>' +
+    '</div>' +
+    // Disk Usage
+    (diskHtml ?
+    '<div class="mp-card">' +
+      '<div class="mp-card-title">' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>' +
+        '磁盘使用' +
+      '</div>' + diskHtml +
+      '<div class="mp-chart"><canvas id="diskUsageChart"></canvas></div>' +
+    '</div>' : '');
+
+  // Draw sparkline charts after DOM update
+  requestAnimationFrame(() => {
+    drawSparkline('cpuChart', cpuHistory, '#2563eb', 'rgba(37,99,235,0.15)');
+    drawSparkline('memChart', memHistory, '#00e676', 'rgba(0,230,118,0.15)');
+    // Network: dual line (rx + tx), auto scale
+    drawSparklineMulti('netChart', [
+      { data: rxHistory, stroke: '#00e676', fill: 'rgba(0,230,118,0.1)' },
+      { data: txHistory, stroke: '#60a5fa', fill: 'rgba(96,165,250,0.1)' },
+    ]);
+    // Disk I/O: dual line (read + write), auto scale
+    drawSparklineMulti('diskIoChart', [
+      { data: readHistory, stroke: '#ffd93d', fill: 'rgba(255,217,61,0.1)' },
+      { data: writeHistory, stroke: '#d63384', fill: 'rgba(214,51,132,0.1)' },
+    ]);
+    // Disk Usage: one line per mount, auto scale (0-100)
+    if (s.diskUsage.length > 0) {
+      const diskSeries = s.diskUsage.map((d, i) => ({
+        data: diskUsageHistory[d.mount] || [],
+        stroke: ['#2563eb','#00e676','#ffd93d','#d63384','#60a5fa'][i % 5],
+        fill: 'transparent',
+      }));
+      drawSparklineMulti('diskUsageChart', diskSeries, 0, 100);
+    }
+  });
+}
+
+function drawSparkline(canvasId, data, strokeColor, fillColor) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || data.length < 2) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = rect.height;
+  const max = 100, min = 0;
+  const step = w / (MONITOR_HISTORY_LEN - 1);
+  const startX = w - (data.length - 1) * step;
+
+  // Fill
+  ctx.beginPath();
+  ctx.moveTo(startX, h);
+  data.forEach((v, i) => {
+    const x = startX + i * step;
+    const y = h - ((v - min) / (max - min)) * (h - 4);
+    if (i === 0) ctx.lineTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.lineTo(startX + (data.length - 1) * step, h);
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+
+  // Stroke
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = startX + i * step;
+    const y = h - ((v - min) / (max - min)) * (h - 4);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Last value dot
+  if (data.length > 0) {
+    const lastX = startX + (data.length - 1) * step;
+    const lastY = h - ((data[data.length - 1] - min) / (max - min)) * (h - 4);
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = strokeColor;
+    ctx.fill();
+  }
+}
+
+function drawSparklineMulti(canvasId, series, fixedMin, fixedMax) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const hasData = series.some(s => s.data.length >= 2);
+  if (!hasData) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = rect.height;
+  // Auto scale from all data
+  let min = fixedMin !== undefined ? fixedMin : Infinity;
+  let max = fixedMax !== undefined ? fixedMax : -Infinity;
+  if (fixedMin === undefined || fixedMax === undefined) {
+    series.forEach(s => s.data.forEach(v => {
+      if (fixedMin === undefined && v < min) min = v;
+      if (fixedMax === undefined && v > max) max = v;
+    }));
+    if (min === max) { min = 0; max = 100; }
+    const pad = (max - min) * 0.1;
+    if (fixedMin === undefined) min = Math.max(0, min - pad);
+    if (fixedMax === undefined) max = max + pad;
+  }
+  const step = w / (MONITOR_HISTORY_LEN - 1);
+  series.forEach(s => {
+    if (s.data.length < 2) return;
+    const startX = w - (s.data.length - 1) * step;
+    // Fill
+    if (s.fill && s.fill !== 'transparent') {
+      ctx.beginPath();
+      ctx.moveTo(startX, h);
+      s.data.forEach((v, i) => {
+        const x = startX + i * step;
+        const y = h - ((v - min) / (max - min)) * (h - 4);
+        ctx.lineTo(x, y);
+      });
+      ctx.lineTo(startX + (s.data.length - 1) * step, h);
+      ctx.closePath();
+      ctx.fillStyle = s.fill;
+      ctx.fill();
+    }
+    // Stroke
+    ctx.beginPath();
+    s.data.forEach((v, i) => {
+      const x = startX + i * step;
+      const y = h - ((v - min) / (max - min)) * (h - 4);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = s.stroke;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Last dot
+    if (s.data.length > 0) {
+      const lastX = startX + (s.data.length - 1) * step;
+      const lastY = h - ((s.data[s.data.length - 1] - min) / (max - min)) * (h - 4);
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = s.stroke;
+      ctx.fill();
+    }
+  });
+}
+
+function formatUptime(sec) {
+  if (sec <= 0) return '-';
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (d > 0) return d + '天' + h + '时';
+  if (h > 0) return h + '时' + m + '分';
+  return m + '分';
 }
 
 function formatNetSpeed(bps) {
   if (bps < 1024) return bps.toFixed(0) + ' B/s';
   if (bps < 1024 * 1024) return (bps / 1024).toFixed(1) + ' KB/s';
   return (bps / (1024 * 1024)).toFixed(2) + ' MB/s';
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes.toFixed(0) + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 }
 
 // ===== File Panel Toggle =====
@@ -602,14 +830,6 @@ function setupDropZone() {
 }
 
 // ===== Utilities =====
-function formatSize(bytes) {
-  if (bytes === undefined || bytes === null) return '';
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' K';
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' M';
-  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' G';
-}
-
 function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }

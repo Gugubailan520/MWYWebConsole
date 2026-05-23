@@ -815,7 +815,7 @@ wss.on('connection', (ws, req) => {
     // ---- Monitor: collect /proc stats via SSH exec ----
     } else if (data.type === 'monitor-stats') {
       if (!sshClient) { sendJSON(ws, { type: 'monitor-stats-result', error: 'not connected' }); return; }
-      const cmd = "cat /proc/stat 2>/dev/null; echo '===MEMINFO==='; cat /proc/meminfo 2>/dev/null; echo '===NETDEV==='; cat /proc/net/dev 2>/dev/null; echo '===DISKSTATS==='; cat /proc/diskstats 2>/dev/null";
+      const cmd = "cat /proc/stat 2>/dev/null; echo '===MEMINFO==='; cat /proc/meminfo 2>/dev/null; echo '===NETDEV==='; cat /proc/net/dev 2>/dev/null; echo '===DISKSTATS==='; cat /proc/diskstats 2>/dev/null; echo '===UPTIME==='; cat /proc/uptime 2>/dev/null; echo '===LOADAVG==='; cat /proc/loadavg 2>/dev/null; echo '===DF==='; df -h --output=target,size,used,avail,pcent -x tmpfs -x devtmpfs -x squashfs 2>/dev/null; echo '===THERMAL==='; for f in /sys/class/thermal/thermal_zone*/temp; do [ -f \"$f\" ] && echo \"$(cat $f 2>/dev/null)\"; done";
       sshClient.exec(cmd, (err, ch) => {
         if (err) { sendJSON(ws, { type: 'monitor-stats-result', error: err.message }); return; }
         let out = '';
