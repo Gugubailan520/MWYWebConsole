@@ -11,13 +11,14 @@ let reqIdCounter = 0;
 const pendingReqs = {};
 
 // ===== Settings =====
-let settings = { autoFollow: false, showHidden: true, autoOpen: false, autoMonitor: false, termOpacity: 95 };
+let settings = { autoFollow: false, showHidden: true, autoOpen: false, autoMonitor: false, termOpacity: 95, localEcho: true };
 function loadSettings() {
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY))); } catch {}
   document.getElementById('settingAutoFollow').checked = settings.autoFollow;
   document.getElementById('settingShowHidden').checked = settings.showHidden;
   document.getElementById('settingAutoOpen').checked = settings.autoOpen;
   document.getElementById('settingAutoMonitor').checked = settings.autoMonitor;
+  document.getElementById('settingLocalEcho').checked = settings.localEcho;
   const op = settings.termOpacity;
   document.getElementById('settingTermOpacity').value = op;
   document.getElementById('termOpacityLabel').textContent = op + '%';
@@ -62,16 +63,17 @@ if (!connInfo) {
 
 // ===== Terminal =====
 function termBg(opacity) {
-  const v = Math.max(0, Math.min(100, opacity)) / 100;
-  return v >= 1 ? '#05060f' : `rgba(5, 6, 15, ${v.toFixed(2)})`;
+  return '#05060f';
 }
 
 function updateTermOpacity(val) {
   val = parseInt(val);
   saveSetting('termOpacity', val);
   document.getElementById('termOpacityLabel').textContent = val + '%';
-  if (term) {
-    term.options.theme = Object.assign({}, term.options.theme, { background: termBg(val) });
+  // 通过 CSS opacity 控制终端容器的透明度
+  const wrap = document.querySelector('.terminal-wrap');
+  if (wrap) {
+    wrap.style.opacity = Math.max(0, Math.min(100, val)) / 100;
   }
 }
 
@@ -80,8 +82,12 @@ function initTerminal() {
   term = new Terminal({
     cursorBlink: true,
     fontSize: isMobile ? 12 : 14,
-    fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Consolas', monospace",
-    allowTransparency: true,
+    fontFamily: "'Consolas', 'Courier New', monospace",
+    allowTransparency: false,
+    letterSpacing: 1,
+    lineHeight: 1.2,
+    drawBoldTextInBrightColors: true,
+    rendererType: 'dom',
     theme: {
       background: termBg(settings.termOpacity), foreground: '#c8cddf', cursor: '#60a5fa', cursorAccent: '#05060f',
       selectionBackground: 'rgba(37, 99, 235, 0.3)', selectionForeground: '#eef0ff',
@@ -100,6 +106,10 @@ function initTerminal() {
   term.onData((data) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'data', data }));
+      // 本地回显：解决某些服务器/终端模式下输入字符（特别是数字）不回显的问题
+      if (settings.localEcho && data.length === 1 && data.charCodeAt(0) >= 0x20 && data.charCodeAt(0) < 0x7f) {
+        term.write(data);
+      }
       scheduleAutoFollow();
     }
   });
@@ -762,4 +772,46 @@ document.getElementById('editorOverlay').addEventListener('click', (e) => {
 
 // ===== Init =====
 loadSettings();
-if (connInfo) startConnection();
+if (connInfo) {
+  // 等待字体加载完成后再初始化终端，避免字符宽度测量不准确
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => startConnection());
+  } else {
+    startConnection();
+  }
+}
+
+// ===== Mobile Virtual Keyboard =====
+let vkModifiers = { Ctrl: false, Alt: false };
+
+function vkSend(seq) {
+  if (!ws || ws.readyState !== WebSocket.OPEN || !term) return;
+  if (vkModifiers.Ctrl || vkModifiers.Alt) {
+    // If Ctrl or Alt is active, prepend modifier to a single character
+    if (seq.length === 1) {
+      let code = seq.charCodeAt(0);
+      if (vkModifiers.Ctrl && code >= 0x40 && code <= 0x7e) {
+        // Ctrl+A..Z → 0x01..0x1a, Ctrl+[\]^_ → 0x1b..0x1f
+        const ctrlCode = code === 63 ? 0x7f : (code & 0x1f);
+        seq = String.fromCharCode(ctrlCode);
+      } else if (vkModifiers.Alt) {
+        seq = '\x1b' + seq;
+      }
+    }
+    // Auto-release modifiers after sending
+    vkModifiers.Ctrl = false;
+    vkModifiers.Alt = false;
+    document.getElementById('vkCtrl').classList.remove('active');
+    document.getElementById('vkAlt').classList.remove('active');
+  }
+  ws.send(JSON.stringify({ type: 'data', data: seq }));
+  scheduleAutoFollow();
+  // Refocus terminal so hardware keyboard still works
+  term.focus();
+}
+
+function vkToggle(mod) {
+  vkModifiers[mod] = !vkModifiers[mod];
+  const btn = document.getElementById('vk' + mod);
+  btn.classList.toggle('active', vkModifiers[mod]);
+}

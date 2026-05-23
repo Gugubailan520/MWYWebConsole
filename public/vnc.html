@@ -133,6 +133,14 @@
       background: var(--bg-surface);
       font-size: 10px; color: var(--text-tertiary);
     }
+
+    @media (max-width: 768px) {
+      .topbar { padding: 0 8px; gap: 4px; height: 40px; min-height: 40px; }
+      .topbar-sub { display: none; }
+      .tb-btn { padding: 4px 8px; font-size: 10px; }
+      .tb-btn svg { width: 11px; height: 11px; }
+      .statusbar { padding: 4px 10px; }
+    }
   </style>
 </head>
 <body>

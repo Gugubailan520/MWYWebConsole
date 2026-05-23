@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>冥雾云Web控制台</title>
-  <script src="/site-style.js"></script>
+  <script src="/site-style.js?v=2"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -407,6 +407,34 @@
       .fp-item-actions { display: flex; }
     }
 
+    /* ===== Mobile Virtual Keyboard Bar ===== */
+    .vk-bar {
+      display: none;
+      height: 40px; min-height: 40px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      overflow-x: auto; white-space: nowrap;
+      padding: 4px 6px; gap: 4px;
+      scrollbar-width: none;
+      align-items: center;
+    }
+    .vk-bar::-webkit-scrollbar { display: none; }
+    .vk-key {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 36px; height: 32px; padding: 0 8px;
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text-secondary);
+      font-size: 12px; font-weight: 600; font-family: inherit;
+      cursor: pointer; flex-shrink: 0; transition: all 0.1s;
+      -webkit-tap-highlight-color: transparent; user-select: none;
+    }
+    .vk-key:active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .vk-key.active { background: rgba(37,99,235,0.2); color: var(--accent-light); border-color: rgba(37,99,235,0.4); }
+    @media (max-width: 768px) {
+      .vk-bar { display: flex; }
+      .terminal-wrap { flex: 1; }
+    }
+
     /* ===== Monitor Panel ===== */
     .monitor-panel {
       width: var(--monitor-panel-width); min-width: var(--monitor-panel-width);
@@ -564,6 +592,24 @@
       <div class="terminal-wrap">
         <div id="terminal"></div>
       </div>
+      <!-- Mobile Virtual Keyboard Bar -->
+      <div class="vk-bar" id="vkBar">
+        <button class="vk-key" id="vkEsc" onclick="vkSend('\x1b')">Esc</button>
+        <button class="vk-key" id="vkTab" onclick="vkSend('\t')">Tab</button>
+        <button class="vk-key vk-toggle" id="vkCtrl" onclick="vkToggle('Ctrl')">Ctrl</button>
+        <button class="vk-key vk-toggle" id="vkAlt" onclick="vkToggle('Alt')">Alt</button>
+        <button class="vk-key" onclick="vkSend('\x01')">Home</button>
+        <button class="vk-key" onclick="vkSend('\x05')">End</button>
+        <button class="vk-key" onclick="vkSend('\x7f')">⌫</button>
+        <button class="vk-key" onclick="vkSend('\x1b[A')">↑</button>
+        <button class="vk-key" onclick="vkSend('\x1b[B')">↓</button>
+        <button class="vk-key" onclick="vkSend('\x1b[C')">→</button>
+        <button class="vk-key" onclick="vkSend('\x1b[D')">←</button>
+        <button class="vk-key" onclick="vkSend('\x1b[1;5C')">C→</button>
+        <button class="vk-key" onclick="vkSend('\x1b[1;5D')">C←</button>
+        <button class="vk-key" onclick="vkSend(' ')">Space</button>
+        <button class="vk-key" onclick="vkSend('\n')">Enter</button>
+      </div>
     </div>
 
     <!-- Monitor Panel -->
@@ -632,6 +678,16 @@
         </div>
         <div class="setting-row">
           <div>
+            <div class="setting-label">本地回显</div>
+            <div class="setting-desc">输入字符时立即在终端显示，解决部分服务器不回显导致数字不显示的问题</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="settingLocalEcho" onchange="saveSetting('localEcho', this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="setting-row">
+          <div>
             <div class="setting-label">终端透明度</div>
             <div class="setting-desc">调整终端背景的透明程度，0%完全透明</div>
           </div>
@@ -680,6 +736,6 @@
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
-  <script src="terminal.js"></script>
+  <script src="terminal.js?v=3"></script>
 </body>
 </html>

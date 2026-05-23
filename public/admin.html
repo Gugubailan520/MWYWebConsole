@@ -264,14 +264,22 @@
 
     /* Responsive */
     @media (max-width: 768px) {
+      .layout { flex-direction: column; }
       .sidebar {
         width: 100%; min-width: 100%; height: auto;
         position: relative; flex-direction: row; overflow-x: auto;
+        border-right: none; border-bottom: 1px solid var(--border);
       }
       .sidebar-header { display: none; }
-      .sidebar-nav { flex-direction: row; padding: 8px; }
+      .sidebar-nav { flex-direction: row; padding: 8px; gap: 2px; }
+      .nav-item { padding: 8px 10px; font-size: 12px; white-space: nowrap; }
       .sidebar-footer { display: none; }
-      .main { margin-left: 0; padding: 20px 16px; }
+      .main { margin-left: 0; padding: 16px 12px; }
+      .page-header h2 { font-size: 16px; }
+      .card { padding: 14px; }
+      .form-group { margin-bottom: 14px; }
+      .table-wrap { font-size: 12px; }
+      .toggle-row { padding: 10px 0; }
     }
   </style>
 </head>
