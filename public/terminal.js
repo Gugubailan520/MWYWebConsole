@@ -11,7 +11,7 @@ let reqIdCounter = 0;
 const pendingReqs = {};
 
 // ===== Settings =====
-let settings = { autoFollow: false, showHidden: true, autoOpen: false, autoMonitor: false, termOpacity: 95, localEcho: true };
+let settings = { autoFollow: false, showHidden: true, autoOpen: false, autoMonitor: false, termOpacity: 95, localEcho: false };
 function loadSettings() {
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY))); } catch {}
   document.getElementById('settingAutoFollow').checked = settings.autoFollow;
