@@ -1,0 +1,29 @@
+services:
+  mwy-web-console:
+    build: .
+    image: mwy-web-console:latest
+    container_name: mwy-web-console
+    restart: unless-stopped
+    ports:
+      - "25555:25555"
+    volumes:
+      # 持久化数据库与上传文件
+      - ./data:/app/data
+      # 可选：覆盖配置文件（修改后重启容器生效）
+      # - ./config.yml:/app/config.yml:ro
+    environment:
+      # 通过环境变量指向 guacd sidecar（启用 RDP 功能必需）
+      - GUACD_HOST=guacd
+      - GUACD_PORT=4822
+      # 推荐通过环境变量覆盖敏感配置；也可挂载 config.yml
+      - JWT_SECRET=please-change-to-random-32+-chars
+      - GUAC_CRYPT_KEY=please-change-to-32-chars-exactly!!
+      # - PORT=25555
+    depends_on:
+      - guacd
+
+  # Apache Guacamole guacd 守护进程（仅 RDP 功能必需；不需要 RDP 可注释掉）
+  guacd:
+    image: guacamole/guacd:1.5.5
+    container_name: mwy-guacd
+    restart: unless-stopped

@@ -67,6 +67,59 @@ pnpm start
 
 服务默认运行在 `http://localhost:25555`。首次启动自动创建 SQLite 数据库和默认配置。
 
+### Docker 部署（推荐）
+
+项目自带 `Dockerfile` 与 `docker-compose.yml`，开箱即用。镜像基于 `node:18-bookworm-slim`，多阶段构建以编译原生模块（`better-sqlite3`），并通过 `tini` 作为 1 号进程。
+
+#### 方式一：docker compose（含 RDP 支持）
+
+```bash
+# 修改 docker-compose.yml 中的 JWT_SECRET / GUAC_CRYPT_KEY 后执行
+docker compose up -d
+```
+
+编排包含两个服务：
+- `mwy-web-console` — 本应用，暴露 `25555` 端口
+- `guacd` — Apache Guacamole 守护进程（RDP 必需；不需要 RDP 可在 compose 文件中注释掉，并移除 `GUACD_HOST` 环境变量与 `depends_on`）
+
+#### 方式二：直接构建镜像
+
+```bash
+docker build -t mwy-web-console:latest .
+
+docker run -d --name mwy -p 25555:25555 \
+  -v "$PWD/data:/app/data" \
+  -e JWT_SECRET=$(openssl rand -hex 24) \
+  -e GUAC_CRYPT_KEY="$(openssl rand -base64 24 | head -c 32)" \
+  mwy-web-console:latest
+```
+
+如需 RDP，需另起 guacd 容器，并通过 `GUACD_HOST` 指向它：
+
+```bash
+docker run -d --name guacd --restart unless-stopped guacamole/guacd:1.5.5
+docker network create mwy-net 2>/dev/null; docker network connect mwy-net guacd
+docker network connect mwy-net mwy  # 然后将 GUACD_HOST 设为 guacd
+```
+
+#### 配置覆盖
+
+镜像优先级：`config.yml` > 环境变量 > `config.example.yml`（内置兜底）。任选其一：
+
+- **环境变量**（推荐用于密钥）：`PORT`、`JWT_SECRET`、`GUACD_HOST`、`GUACD_PORT`、`GUAC_WS_PORT`、`GUAC_CRYPT_KEY`、`DATABASE`
+- **挂载配置文件**：`-v "$PWD/config.yml:/app/config.yml:ro"`
+
+#### 数据持久化
+
+`/app/data` 已声明为 VOLUME（SQLite 数据库 + 上传文件）。生产部署务必挂载宿主目录：
+
+```yaml
+volumes:
+  - ./data:/app/data
+```
+
+> 默认管理员为 `admin / changeme`，请务必通过挂载 `config.yml` 修改。
+
 ### 配置文件 (config.yml)
 
 编辑 `config.yml`（参考 `config.example.yml`）：
